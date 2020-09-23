@@ -41,10 +41,12 @@ func convertCur(filename string, cleanname string, conf io.StringWriter) error {
 
 	for j, img := range ico.Images {
 		name := fmt.Sprintf(cleanname+"-%v.png", j)
-		writePNG(filepath.Join(TEMPDIR, name), img)
+		if err := writePNG(filepath.Join(TEMPDIR, name), img); err != nil {
+			return err
+		}
 		if _, err := conf.WriteString(fmt.Sprintf(
 			// size xhot yhot filename
-			"%v	%v	%v	%v %v\n", // plane/bits in cur is xy hotspots
+			"%v	%v	%v	%v %v\n", // plane/bits in cur files are x/y hotspots
 			ico.Direntries[j].Width, ico.Direntries[j].Plane, ico.Direntries[j].Bits, name,
 		)); err != nil {
 			return err
@@ -56,21 +58,26 @@ func convertCur(filename string, cleanname string, conf io.StringWriter) error {
 func convertAni(filename string, cleanname string, conf io.StringWriter) error {
 	cursor, err := readRiff(filename)
 	if err != nil {
-		return err
+		// try ico
+		return convertCur(filename, cleanname, conf)
 	}
-
 	for i, c := range cursor.Icons {
-		for j, img := range c.Images {
-			name := fmt.Sprintf(cleanname+"-%v-%v.png", i, j)
-			writePNG(filepath.Join(TEMPDIR, name), img)
-			if _, err := conf.WriteString(fmt.Sprintf(
-				// size xhot yhot filename ms-delay
-				"%v	%v	%v	%v %v\n", // plane/bits in cur is xy hotspots
-				c.Direntries[j].Width, c.Direntries[j].Plane, c.Direntries[j].Bits,
-				name, int(cursor.Header.JifRate*10/6*10),
-			)); err != nil {
-				return err
-			}
+		// assume Icons in animated cursors only have one image
+		name := fmt.Sprintf(cleanname+"-%v.png", i)
+		if err := writePNG(filepath.Join(TEMPDIR, name), c.Images[0]); err != nil {
+			return err
+		}
+	}
+	for _, i := range cursor.Seq {
+		c := cursor.Icons[i]
+		name := fmt.Sprintf(cleanname+"-%v.png", i)
+		if _, err := conf.WriteString(fmt.Sprintf(
+			// size xhot yhot filename ms-delay
+			"%v	%v	%v	%v %v\n", // plane/bits in cur is xy hotspots
+			c.Direntries[0].Width, c.Direntries[0].Plane, c.Direntries[0].Bits,
+			name, int(cursor.Rate[i]*(100/6)),
+		)); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -85,13 +92,17 @@ func convertFile(filename string) error {
 	}
 
 	if err := convertAni(filename, cleanname, conf); err != nil {
-		// try ico
-		if err := convertCur(filename, cleanname, conf); err != nil {
-			return err
-		}
+		return err
 	}
 
-	return exec.Command("xcursorgen", "--prefix", TEMPDIR,
+	cmd := exec.Command("xcursorgen", "--prefix", TEMPDIR,
 		filepath.Join(TEMPDIR, cleanname+".config"),
-		filepath.Join(OUTPUTDIR, cleanname+".xcur")).Run()
+		filepath.Join(OUTPUTDIR, cleanname+".xcur"))
+	if _, err := cmd.Output(); err != nil {
+		if exiterr, ok := err.(*exec.ExitError); ok {
+			os.Stderr.Write(exiterr.Stderr)
+		}
+		return err
+	}
+	return nil
 }

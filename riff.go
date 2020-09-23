@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"io"
 	"os"
 
@@ -37,11 +38,9 @@ type ANIHeader struct {
 
 type ANICursor struct {
 	Header ANIHeader
-	// Iname  []byte
-	// Iart   []byte
-	Rate  []uint32
-	Seq   []uint32
-	Icons []ico.Icon
+	Rate   []uint32
+	Seq    []uint32
+	Icons  []ico.Icon
 }
 
 func readAnih(r io.Reader) (interface{}, error) {
@@ -68,10 +67,10 @@ func readRiff(filename string) (ANICursor, error) {
 	if err != nil {
 		return ANICursor{}, err
 	}
-	return parseRiff(root), nil
+	return parseRiff(root)
 }
 
-func parseRiff(root *riff.Chunk) (cursor ANICursor) {
+func parseRiff(root *riff.Chunk) (cursor ANICursor, err error) {
 	chunks := make(map[riff.ID]*riff.Chunk)
 	for _, chunk := range root.Chunks {
 		chunks[chunk.ID] = chunk
@@ -83,17 +82,26 @@ func parseRiff(root *riff.Chunk) (cursor ANICursor) {
 		cursor.Icons[idx] = chunk.Content.(ico.Icon)
 	}
 
+	cursor.Rate = make([]uint32, cursor.Header.NumSteps)
 	if chunks[RIFF_RATE] != nil {
-		cursor.Rate = make([]uint32, cursor.Header.NumSteps)
 		r := bytes.NewReader(chunks[RIFF_RATE].Data)
 		binary.Read(r, binary.LittleEndian, &cursor.Rate)
+	} else {
+		for i := range cursor.Rate {
+			cursor.Rate[i] = cursor.Header.JifRate
+		}
 	}
-
+	cursor.Seq = make([]uint32, cursor.Header.NumSteps)
 	if chunks[RIFF_SEQ] != nil {
-		cursor.Seq = make([]uint32, cursor.Header.NumSteps)
 		r := bytes.NewReader(chunks[RIFF_SEQ].Data)
 		binary.Read(r, binary.LittleEndian, &cursor.Seq)
+	} else {
+		for i := range cursor.Seq {
+			cursor.Seq[i] = uint32(i)
+		}
 	}
-
-	return cursor
+	if cursor.Header.Flags&ANIFLAG_CUR != ANIFLAG_CUR {
+		return cursor, errors.New("frames are not ico/cur data")
+	}
+	return cursor, nil
 }
