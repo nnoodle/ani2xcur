@@ -59,7 +59,7 @@ func convertAni(filename string, cleanname string, conf io.StringWriter) error {
 	cursor, err := readRiff(filename)
 	if err != nil {
 		// try ico
-		return convertCur(filename, cleanname, conf)
+		return err
 	}
 	for i, c := range cursor.Icons {
 		// assume Icons in animated cursors only have one image
@@ -91,7 +91,13 @@ func convertFile(filename string) error {
 		return err
 	}
 
-	if err := convertAni(filename, cleanname, conf); err != nil {
+	switch path.Ext(filename) {
+	case ".ani":
+		err = convertAni(filename, cleanname, conf)
+	default:
+		err = convertCur(filename, cleanname, conf)
+	}
+	if err != nil {
 		return err
 	}
 

@@ -1,12 +1,13 @@
 # ani2xcur
 
-convert windows's `.cur` and `.ani` cursor files into the xcur format for linux
+convert windows's `.cur` and `.ani` cursor files into the xcur format
+for linux.
 
-# system requirements
+## system requirements
 - Go
 - `xcursorgen`
 
-# installation
+## installation
 ```shell
 go get -u github.com/nnoodle/ani2xcur
 ```

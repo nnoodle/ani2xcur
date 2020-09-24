@@ -154,9 +154,12 @@ func (d *decoder) decode(r io.Reader) (err error) {
 
 func (d *decoder) decodeHeader(r io.Reader) error {
 	binary.Read(r, binary.LittleEndian, &(d.head))
-	if d.head.Zero != 0 /* || d.head.Type != 1 */ {
+	if d.head.Zero != 0 {
 		// return fmt.Errorf("corrupted head: [%x,%x]", d.head.Zero, d.head.Type)
 		return fmt.Errorf("corrupted head: [%x] (should be zero)", d.head.Zero)
+	}
+	if d.head.Type != 1 && d.head.Type != 2 {
+		return fmt.Errorf("corrupted type: [%x] (must be 1 or 2)", d.head.Type)
 	}
 	return nil
 }

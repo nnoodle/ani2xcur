@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 
-	"github.com/campoy/riff"
+	// "github.com/campoy/riff"
 	"github.com/nnoodle/ani2xcur/ico"
+	"github.com/nnoodle/ani2xcur/riff"
 )
 
 const (
@@ -18,6 +20,7 @@ const (
 
 var (
 	RIFF_LIST = riff.NewID("LIST")
+	RIFF_FRAM = riff.NewID("fram")
 	RIFF_ANIH = riff.NewID("anih")
 	RIFF_ICON = riff.NewID("icon")
 	RIFF_RATE = riff.NewID("rate")
@@ -65,20 +68,27 @@ func readRiff(filename string) (ANICursor, error) {
 	riffreader.Map(RIFF_ICON, riff.DecoderFunc(readIcon))
 	root, err := riffreader.Decode()
 	if err != nil {
-		return ANICursor{}, err
+		if errors.Unwrap(err).Error() == "read id: EOF" {
+			fmt.Println("warning:", filename, "ended abruptly")
+		} else {
+			return ANICursor{}, err
+		}
 	}
-	return parseRiff(root)
-}
 
-func parseRiff(root *riff.Chunk) (cursor ANICursor, err error) {
 	chunks := make(map[riff.ID]*riff.Chunk)
 	for _, chunk := range root.Chunks {
-		chunks[chunk.ID] = chunk
+		if chunk.ID == RIFF_LIST {
+			chunks[chunk.ListID] = chunk
+		} else {
+			chunks[chunk.ID] = chunk
+		}
 	}
 
+	var cursor ANICursor
+
 	cursor.Header = chunks[RIFF_ANIH].Content.(ANIHeader)
-	cursor.Icons = make([]ico.Icon, len(chunks[RIFF_LIST].Chunks))
-	for idx, chunk := range chunks[RIFF_LIST].Chunks {
+	cursor.Icons = make([]ico.Icon, len(chunks[RIFF_FRAM].Chunks))
+	for idx, chunk := range chunks[RIFF_FRAM].Chunks {
 		cursor.Icons[idx] = chunk.Content.(ico.Icon)
 	}
 
@@ -101,7 +111,7 @@ func parseRiff(root *riff.Chunk) (cursor ANICursor, err error) {
 		}
 	}
 	if cursor.Header.Flags&ANIFLAG_CUR != ANIFLAG_CUR {
-		return cursor, errors.New("frames are not ico/cur data")
+		return cursor, errors.New("frames are not cur data")
 	}
 	return cursor, nil
 }
